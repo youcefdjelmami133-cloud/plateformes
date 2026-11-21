@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>بطاقة حيوان</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="card">
+    <h1>الحيوان DZ-0002</h1>
+    <p>نعجة من سلالة أولاد جلال</p>
+    <p>المرحلة الحالية: أواخر الحمل</p>
+
+    <!-- تمرين الدرس 1: تاريخ الميلاد -->
+    <p>تاريخ الميلاد: <strong>20/02/2022</strong></p>
+
+    <!-- قسم الأحداث -->
+    <h2>الأحداث</h2>
+    <form id="event-form">
+      <label>التاريخ:
+        <input type="date" id="event-date" required>
+      </label>
+      <br><br>
+
+      <label>نوع الحدث:
+        <select id="event-type">
+          <option>ولادة</option>
+          <option>تلقيح</option>
+          <option>تشخيص حمل</option>
+          <option>علاج</option>
+        </select>
+      </label>
+      <br><br>
+
+      <label>ملاحظات:<br>
+        <textarea id="event-notes" rows="3" cols="30" placeholder="مثلاً: تلقى اللقاح بنجاح"></textarea>
+      </label>
+      <br><br>
+
+      <button type="submit">حفظ الحدث</button>
+    </form>
+
+    <h2>الأحداث المسجلة</h2>
+    <table id="events-table" border="1">
+      <thead>
+        <tr>
+          <th>التاريخ</th>
+          <th>نوع الحدث</th>
+          <th>ملاحظات</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+
+    <!-- ====== جدول الأوزان (كان ناقصاً) ====== -->
+    <h2>الأوزان</h2>
+    <table id="weights-table" border="1">
+      <thead>
+        <tr>
+          <th>التاريخ</th>
+          <th>الوزن (كغ)</th>
+          <th>النوع</th>
+          <th>ملاحظات</th>
+          <th>رقم الأذن</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+
+    <!-- نموذج تسجيل وزن جديد -->
+    <h2>تسجيل وزن جديد</h2>
+    <form id="weight-form">
+      <label>التاريخ:
+        <input type="date" id="date-input" required>
+      </label>
+      <br><br>
+
+      <label>الوزن (كغ):
+        <input type="number" step="0.1" id="weight-input" required>
+      </label>
+      <br><br>
+
+      <label>النوع:
+        <select id="type-input">
+          <option>ميلاد</option>
+          <option>فطام</option>
+          <option>عادي</option>
+        </select>
+      </label>
+      <br><br>
+
+      <label>ملاحظات:<br>
+        <textarea id="notes-input" rows="3" cols="30" placeholder="أي ملاحظات إضافية..."></textarea>
+      </label>
+      <br><br>
+
+      <label>رقم الأذن:
+        <input type="text" id="ear-input" placeholder="مثال: DZ-0002">
+      </label>
+      <br><br>
+
+      <button type="submit">حفظ</button>
+    </form>
+    <!-- =========  تحكم بالأسعار (DZD)  ========= -->
+<section id="prices-section" style="margin:30px 0; padding:20px; background:#f9f9f9; border:1px solid #ddd; border-radius:8px;">
+  <h2 style="color:#4a90d9; margin-top:0;">أسعار الأعلاف (الدينار postal)</h2>
+  <p style="color:#888; font-size:14px;">غير السعر لكل علف، ثم اضغط <b>حفظ الأسعار</b>.</p>
+
+  <div id="prices-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; margin-top:15px;">
+    <!-- الأعلاف ستُInject هنا من JavaScript -->
+  </div>
+
+  <button id="save-prices" class="sm" style="margin-top:15px;">حفظ الأسعار</button>
+  <button id="reset-prices" class="sm" style="margin-top:15px; background:#e74c3c;">إعادة التعيين</button>
+</section>
+  </div><!-- ====================  حاسبة الحصص  ==================== -->
+<section id="calc">
+  <h2>حاسبة الحصص اليومية</h2>
+  <p class="m">حدد المرحلة، عدد الحيوانات، ووزن كل حيوان لتظهر لك الكمية المطلوبة من العلف.</p>
+
+  <div class="card">
+    <label>المرحلة
+      <select id="calc-stage">
+        <option value="0">جافة / صيانة</option>
+        <option value="1">تحفيز قبل الجمع</option>
+        <option value="2">بداية الحمل</option>
+        <option value="3">أواخر الحمل (مولود)</option>
+        <option value="4">أواخر الحمل (توأم)</option>
+        <option value="5">رضاعة (مولود)</option>
+        <option value="6">رضاعة (توأم)</option>
+        <option value="7">نهاية الرضاعة</option>
+        <option value="8">كبش قبل وأثناء التلقيح</option>
+        <option value="9">حمل (زيادة 20 كغ)</option>
+        <option value="10">حمل (زيادة 30 كغ)</option>
+        <option value="11">حمل (زيادة 40 كغ)</option>
+      </select>
+    </label>
+
+    <label>عدد الحيوانات
+      <input type="number" id="calc-animals" min="1" value="1" class="m">
+    </label>
+
+    <label>وزن كل حيوان (كغ)
+      <input type="number" id="calc-weight" min="0" step="0.1" value="50" class="m">
+    </label>
+
+    <button id="calc-btn" class="sm">احسب</button>
+
+    <div class="res" id="calc-result" aria-live="polite"></div>
+  </div><!-- عنصر يحتوي على التحذيرات -->
+<!-- عنصر التحذيرات — بدون لون افتراضي -->
+<div id="warnings" style="margin-top:12px; font-weight:bold;"></div>
+</section>
+  <script src="data.js"></script>
+<script src="calc.js"></script>
+<script src="app.js" defer></script>
+</body>
+</html>
