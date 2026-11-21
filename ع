@@ -1,0 +1,853 @@
+/* ==========================================================
+   calc.js – حاسبة الحصص + تحكم الأسعار (بدون تنبيهات)
+   ========================================================== */
+
+// 1️⃣ الأسعار الافتراضية
+const DEFAULT_PRICES = {
+  "الشعير (حبوب)"      : 35,
+  "الذرة (حبوب)"       : 40,
+  "كسب الصوجا"         : 80,
+  "نخالة القمح"        : 25,
+  "تفل الشمندر"        : 20,
+  "التبن"              : 15,
+  "دريس الشوفان"       : 22,
+  "دريس الفصة"         : 30,
+  "الشعير الأخضر"      : 18,
+  "الحلفاء"            : 12,
+  "الشيح"              : 15,
+  "مركب معدني (CMV)"   : 150,
+  "الملح"              : 10,
+  "الكلس"              : 8
+};
+
+/* -------------------------------------------------- */
+function loadPrices() {
+  const saved = localStorage.getItem("feedPrices");
+  return saved ? Object.assign({}, DEFAULT_PRICES, JSON.parse(saved))
+               : Object.assign({}, DEFAULT_PRICES);
+}
+
+function savePrices() {
+  const prices = {};
+  document.querySelectorAll(".price-input").forEach(function (input) {
+    const name = input.getAttribute("data-name");
+    const val  = parseFloat(input.value);
+    prices[name] = isNaN(val) ? 0 : val;
+  });
+  localStorage.setItem("feedPrices", JSON.stringify(prices));
+  calculateRation();
+}
+
+function buildPriceControls() {
+  const grid = document.getElementById("prices-grid");
+  if (!grid) return;
+  const prices = loadPrices();
+  grid.innerHTML = "";
+  Object.keys(DEFAULT_PRICES).forEach(function (name) {
+    const val = prices[name] !== undefined ? prices[name] : DEFAULT_PRICES[name];
+    const div = document.createElement("div");
+    div.style.cssText = "background:#fff;padding:12px;border:1px solid #ccc;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.06)";
+    div.innerHTML = `
+      <label style="display:block;font-weight:bold;margin-bottom:6px;color:#333;">${name}</label>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input type="number" class="price-input" data-name="${name}" value="${val}" step="0.5" min="0"
+               style="flex:1;padding:7px 10px;border:1px solid #bbb;border-radius:5px;font-size:14px;">
+        <span style="color:#888;font-size:13px;">DA/كغ</span>
+      </div>`;
+    grid.appendChild(div);
+  });
+}
+
+/* -------------------------------------------------- */
+function calculateRation() {
+
+  const stageIdx = parseInt(document.getElementById("calc-stage").value);
+  const animals  = parseFloat(document.getElementById("calc-animals").value);
+  const weight   = parseFloat(document.getElementById("calc-weight").value);
+  const result   = document.getElementById("calc-result");
+  const warnings = document.getElementById("warnings"); // لا نحتاج له الآن، لكنه يبقى موجودًا
+
+  // لا نحتاج أي فحص للتحذيرات هنا
+  if (isNaN(animals) || animals <= 0) {
+    result.innerHTML = '<p style="color:red;padding:10px">⚠️ أدخل عدد الحيوانات.</p>';
+    return;
+  }
+
+  const stage  = FarmData.STAGES[stageIdx];
+  const ration = FarmData.RATIONS[stageIdx];
+  const feeds  = FarmData.FEEDS;
+
+  if (!stage || !ration) {
+    result.innerHTML = '<p style="color:red;padding:10px">⚠️ مرحلة غير موجودة.</p>';
+    return;
+  }
+
+  const prices = loadPrices();
+
+  let rows             = "";
+  let totalKgPerAnimal = 0;
+  let totalCost        = 0;
+  const totalWeight    = animals * weight;
+
+  ration.forEach(function (pair) {
+    const feedIdx  = pair[0];
+    const qty      = pair[1];
+    const feed     = feeds[feedIdx];
+    if (!feed) return;
+
+    const feedName = feed[0];
+    const feedCat  = feed[1];
+    const price    = (prices[feedName] !== undefined) ? prices[feedName] : 30;
+    const qtyTotal = qty * animals;
+    const cost     = qtyTotal * price;
+
+    totalKgPerAnimal += qty;
+    totalCost        += cost;
+
+    rows += `<tr>
+      <td style="text-align:right;padding:6px 10px">${feedName}</td>
+      <td style="padding:6px 10px;text-align:center">${qty} كغ</td>
+      <td style="padding:6px 10px;text-align:center">${qtyTotal.toFixed(2)} كغ</td>
+      <td style="padding:6px 10px;text-align:center;color:#888">${feedCat}</td>
+      <td style="padding:6px 10px;text-align:center;color:#27ae60;">${cost.toFixed(0)} DA</td>
+    </tr>`;
+  });
+
+  const totalKgAll = (totalKgPerAnimal * animals).toFixed(2);
+
+  // ---------- بناء النتيجة ----------
+  result.innerHTML = `
+    <h3 style="color:#4a90d9;margin:0 0 6px;">${stage[0]}</h3>
+    <p style="color:#888;font-size:13px;margin:0 0 12px;">
+      المادة الجافة: <b>${stage[1]}–${stage[2]} كغ</b> · الطاقة: <b>${stage[4]}–${stage[5]} ${stage[3]}</b>
+    </p>
+
+    <div style="overflow-x:auto;">
+      <table style="border-collapse:collapse;width:100%;font-size:14px;border:1px solid #ddd;border-radius:8px;">
+        <thead style="background:#f0f4ff;">
+          <tr>
+            <th style="padding:9px 10px;text-align:right">العلف</th>
+            <th style="padding:9px 10px">لكل رأس</th>
+            <th style="padding:9px 10px">للقطيع (${animals} رأس)</th>
+            <th style="padding:9px 10px">الفئة</th>
+            <th style="padding:9px 10px">التكلفة</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot style="font-weight:bold;background:#f0fff4;">
+          <tr>
+            <td style="padding:9px 10px;text-align:right">المجموع</td>
+            <td style="padding:9px 10px;text-align:center">${totalKgPerAnimal.toFixed(2)} كغ</td>
+            <td style="padding:9px 10px;text-align:center">${totalKgAll} كغ</td>
+            <td></td>
+            <td style="padding:9px 10px;text-align:center;color:#27ae60;font-size:16px">${totalCost.toFixed(0)} DA</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <p style="color:#e67e22;font-size:13px;margin-top:12px;">
+      ⚠️ أضف دائماً حجر ملح ومكمل معدني خاص بالأغنام.
+    </p>
+  `;
+}
+
+/* -------------------------------------------------- */
+document.addEventListener("DOMContentLoaded", function () {
+  buildPriceControls();
+
+  const saveBtn = document.getElementById("save-prices");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", function () {
+      savePrices();
+      saveBtn.textContent = "✅ تم الحفظ!";
+      saveBtn.style.background = "#27ae60";
+      setTimeout(() => { saveBtn.textContent = "حفظ الأسعار"; saveBtn.style.background = ""; }, 2000);
+    });
+  }
+
+  const resetBtn = document.getElementById("reset-prices");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", function () {
+      if (confirm("هل تريد إعادة جميع الأسعار إلى القيم الافتراضية؟")) {
+        localStorage.removeItem("feedPrices");
+        buildPriceControls();
+        calculateRation();
+        resetBtn.textContent = "✅ تمت الإعادة!";
+        setTimeout(() => { resetBtn.textContent = "إعادة التعيين"; }, 2000);
+      }
+    });
+  }
+
+  const calcBtn = document.getElementById("calc-btn");
+  const calcSel = document.getElementById("calc-stage");
+  if (calcBtn) calcBtn.addEventListener("click", calculateRation);
+  if (calcSel) calcSel.addEventListener("change", calculateRation);
+
+  calculateRation();
+});
+// ============================================
+// data.js — بيانات المنصة الفلاحية (أولاد جلال)
+// ============================================
+
+// 1️⃣ الأعلاف: [الاسم، الفئة، MS%، MAT%، UFL، PDIN، PDIE، CB%، Ca، P، Na، حد أقصى%]
+const FEEDS = [
+  ["الشعير (حبوب)",      "طاقة",  87, 11.5, 1.10, 82, 100, 5.5, 0.7, 3.8, 0.1, 55],
+  ["الذرة (حبوب)",       "طاقة",  86, 8.5,  1.20, 62, 97,  2.5, 0.3, 3.0, 0.1, 40],
+  ["التمر غير المسوّق",  "طاقة",  85, 2.5,  1.00, 20, 60,  3.0, 1.0, 0.8, 0.3, 20],
+  ["نوى التمر",          "طاقة",  90, 5.5,  0.70, 33, 45,  18,  1.0, 0.8, 0.2, 20],
+  ["كسب الصوجا",         "بروتين", 88, 46,   1.10, 300, 230, 7.0, 3.5, 7.0, 0.1, 20],
+  ["البقوليات (فول، بازلاء)", "بروتين", 87, 22.5, 1.10, 190, 130, 8.0, 1.5, 5.0, 0.2, 25],
+  ["نخالة القمح",        "ثانوي", 87, 15.5, 0.85, 100, 90,  11,  1.5, 10.5, 0.1, 40],
+  ["تفل الشمندر",        "ثانوي", 90, 9,    0.90, 60, 90,  20,  7.0, 1.0, 1.5, 30],
+  ["التبن",              "خشن",   90, 3.5,  0.45, 22, 50,  40,  3.0, 1.0, 0.5, 40],
+  ["دريس الشوفان/الفيسة","خشن",   87, 8,    0.65, 50, 70,  32,  5.0, 2.5, 0.5, 80],
+  ["دريس الفصة",        "خشن",   87, 17,   0.70, 110, 80,  30,  15,  2.5, 0.5, 70],
+  ["البرسيم الأخضر",    "أخضر",  15, 18,   0.85, 110, 90,  22,  12,  3.0, 0.8, 40],
+  ["الشعير الأخضر",     "أخضر",  20, 15,   0.90, 95,  85,  22,  4.0, 3.5, 0.3, 40],
+  ["الشوفان الأخضر",     "أخضر",  20, 13,   0.85, 82,  80,  25,  3.5, 3.0, 0.3, 40],
+  ["الحلفاء",            "مرعى",  80, 5,    0.40, 30,  55,  38,  3.0, 0.8, 0.3, null],
+  ["الشيح",              "مرعى",  55, 11,   0.60, 70,  70,  28,  8.0, 1.5, 1.5, null],
+  ["الرتم",              "مرعى",  50, 15,   0.60, 95,  75,  30,  8.0, 1.5, 1.0, null],
+  ["الحصيدة",            "مرعى",  88, 5,    0.50, 32,  55,  35,  3.0, 1.0, 0.5, null],
+  ["مركب معدني (CMV)",   "مكمّل", null, null, null, null, null, null, null, null, null, 2],
+  ["الملح",              "مكمّل", 99, 0,    0,    0,   0,   0,   0,   0,   390, 1],
+  ["الكلس (كربونات كالسيوم)", "مكمّل", 99, 0, 0, 0, 0, 0, 380, 0, 0, 2]
+];
+const STAGES = [
+  // index 0
+  ["جافة / صيانة",           1.2, 1.5, "UFL", 0.9, 1.1, 45, 60],
+  // index 1
+  ["تحفيز قبل الجمع",        1.5, 1.8, "UFL", 1.1, 1.3, 50, 70],
+  // index 2
+  ["حمل مبكر",               1.5, 1.8, "UFL", 1.1, 1.3, 50, 70],
+  // index 3
+  ["حمل متأخر (مولود)",      1.8, 2.2, "UFL", 1.3, 1.5, 60, 80],
+  // index 4
+  ["حمل متأخر (توأم)",       2.0, 2.4, "UFL", 1.4, 1.6, 65, 85],
+  // index 5
+  ["إرضاع مبكر (مولود)",     2.0, 2.5, "UFL", 1.5, 1.8, 55, 75],
+  // index 6
+  ["إرضاع مبكر (توأم)",      2.2, 2.8, "UFL", 1.6, 2.0, 60, 80],
+  // index 7
+  ["نهاية الرضاعة",          1.5, 2.0, "UFL", 1.2, 1.5, 50, 70],
+  // index 8
+  ["كبش خارج موسم التلقيح",  1.2, 1.5, "UFL", 0.9, 1.1, 60, 90],
+  // index 9
+  ["كبش أثناء التلقيح",      1.8, 2.2, "UFL", 1.4, 1.7, 65, 95],
+  // index 10
+  ["حمل (زيادة 20 كغ)",      1.0, 1.3, "UFL", 0.8, 1.0, 15, 25],
+  // index 11
+  ["حمل (زيادة 30 كغ)",      1.2, 1.5, "UFL", 0.9, 1.1, 25, 35],
+  // index 12
+  ["حمل (زيادة 40 كغ)",      1.3, 1.6, "UFL", 1.0, 1.2, 35, 45]
+];
+
+const RATIONS = [
+  // 0 – جافة / صيانة
+  [[8,0.9],[9,0.35],[6,0.1]],
+  // 1 – تحفيز قبل الجمع
+  [[0,0.2],[9,0.8],[8,0.6]],
+  // 2 – حمل مبكر
+  [[8,0.9],[9,0.4],[6,0.1]],
+  // 3 – حمل متأخر (مولود)
+  [[0,0.3],[6,0.2],[8,0.3],[9,0.7],[10,0.15]],
+  // 4 – حمل متأخر (توأم)
+  [[0,0.55],[4,0.05],[6,0.1],[8,0.25],[9,0.3],[10,0.3],[20,0.01]],
+  // 5 – إرضاع مبكر (مولود)
+  [[0,0.4],[6,0.4],[8,0.3],[9,0.5],[10,0.4]],
+  // 6 – إرضاع مبكر (توأم)
+  [[0,0.6],[4,0.1],[6,0.4],[8,0.3],[9,0.4],[10,0.6]],
+  // 7 – نهاية الرضاعة
+  [[0,0.1],[6,0.15],[8,0.4],[9,1.1]],
+  // 8 – كبش خارج موسم
+  [[6,0.2],[8,1.2],[9,0.5]],
+  // 9 – كبش أثناء التلقيح
+  [[0,0.2],[6,0.15],[8,0.7],[9,1.0],[10,0.2]],
+  // 10 – حمل زيادة 20 كغ
+  [[0,0.2],[5,0.1],[6,0.3],[9,0.25],[10,0.15]],
+  // 11 – حمل زيادة 30 كغ
+  [[0,0.45],[6,0.25],[9,0.5],[10,0.2]],
+  // 12 – حمل زيادة 40 كغ
+  [[0,0.8],[6,0.1],[9,0.5],[10,0.2]]
+];
+
+// 4️⃣ الأمراض (ملخص للعرض)
+const DISEASES = [
+  {id:1, name:"الجدري", code:"Clavelée", type:"فيروسي", symptoms:"حمى؛ عقيدات وبثور جلدية؛ إفرازات من العين والأنف", prevention:"لقاح ضمن حملات المصالح البيطرية", zoonosis:0, vet:2},
+  {id:2, name:"طاعون المجترات الصغيرة", code:"PPR", type:"فيروسي", symptoms:"حمى؛ إفرازات عينية وأنفية؛ تقرحات فموية؛ إسهال؛ التهاب رئوي؛ نفوق مرتفع", prevention:"تلقيح حول البؤر وفي مناطق الخطر", zoonosis:0, vet:2},
+  {id:3, name:"الحمى القلاعية", code:"Fièvre aphteuse", type:"فيروسي", symptoms:"بثور في الفم والأقدام؛ لعاب غزير؛ عرج", prevention:"حملات التلقيح الوطنية", zoonosis:0, vet:2},
+  {id:4, name:"اللسان الأزرق", code:"Bluetongue", type:"فيروسي (بعوض)", symptoms:"حمى؛ تورم الوجه واللسان؛ عرج؛ إجهاض", prevention:"مكافحة الناقل؛ لقاح حسب النمط", zoonosis:0, vet:1},
+  {id:5, name:"البروسيلا (حمى مالطا)", code:"Brucellose", type:"بكتيري", symptoms:"إجهاض في أواخر الحمل؛ احتباس المشيمة؛ التهاب خصية الكبش", prevention:"كشف وتلقيح حسب البرنامج الوطني", zoonosis:1, vet:2},
+  {id:6, name:"الإجهاض (أسباب متعددة)", code:"Avortement", type:"تناسلي", symptoms:"سقوط الجنين؛ إفرازات مهبلية", prevention:"عزل النعجة، إتلاف المشيمة، تحليل مخبري", zoonosis:2, vet:2},
+  {id:7, name:"تسمم الدم المعوي", code:"Entérotoxémie", type:"بكتيري", symptoms:"نفوق مفاجئ في الحملان سريعة النمو أو بعد الإفراط في المركّزات", prevention:"لقاح؛ تغيير الحصة تدريجيًا", zoonosis:0, vet:2},
+  {id:8, name:"التسمم الحملي", code:"Toxémie de gestation", type:"تغذوي", symptoms:"نعجة حامل (خاصة بتوأم): فقدان الشهية وعزلة وأعراض عصبية", prevention:"تغطية الطاقة في آخر 6 أسابيع", zoonosis:0, vet:2},
+  {id:9, name:"حموضة الكرش", code:"Acidose", type:"تغذوي", symptoms:"امتناع عن الأكل؛ إسهال؛ انتفاخ بعد وجبة غنية بالمركّزات", prevention:"رفع الحبوب تدريجيًا وتوفير الألياف", zoonosis:0, vet:1},
+  {id:10, name:"التهاب الضرع", code:"Mammite", type:"بكتيري", symptoms:"ضرع متورم وساخن؛ حليب غير طبيعي؛ هزال الحملان", prevention:"نظافة الحظيرة والحلب", zoonosis:0, vet:1},
+  {id:11, name:"الطفيليات الداخلية", code:"Parasitoses internes", type:"طفيلي", symptoms:"هزال؛ شحوب الأغشية؛ تورم تحت الفك؛ إسهال الحملان (كوكسيديا)", prevention:"برنامج تطهير وإدارة المراعي", zoonosis:0, vet:1},
+  {id:12, name:"الطفيليات الخارجية", code:"Parasitoses externes", type:"طفيلي", symptoms:"حكة وتساقط الصوف (جرب)؛ قراد؛ عطس وإفرازات أنفية (ذبابة أنفية)", prevention:"معالجة خارجية دورية", zoonosis:0, vet:0},
+  {id:13, name:"داء المشوكات", code:"Hydatidose", type:"طفيلي", symptoms:"غالبًا بلا أعراض؛ تظهر كيسات عند الذبح", prevention:"عدم إعطاء الأحشاء النيئة للكلاب وتطهير الكلاب", zoonosis:1, vet:0},
+  {id:14, name:"أمراض الجهاز التنفسي", code:"Pasteurellose…", type:"بكتيري", symptoms:"سعال؛ حمى؛ إفرازات أنفية", prevention:"تهوية وتخفيف الازدحام والإجهاد", zoonosis:0, vet:1},
+  {id:15, name:"عرج القدم", code:"Piétin", type:"بكتيري", symptoms:"عرج؛ رائحة كريهة من الظلف", prevention:"تقليم الأظلاف وأرضية جافة", zoonosis:0, vet:0},
+  {id:16, name:"أمراض المواليد", code:"Maladies néonatales", type:"متعدد", symptoms:"ضعف؛ إسهال؛ عدم القدرة على الرضاعة", prevention:"لبأ في الساعات الأولى، تعقيم السرة، حصة معدنية للأم", zoonosis:0, vet:2},
+  {id:17, name:"الجمرة الخبيثة", code:"Charbon", type:"بكتيري", symptoms:"نفوق مفاجئ مع نزف", prevention:"لا تفتح الجثة وأبلغ المصالح البيطرية فورًا", zoonosis:1, vet:2}
+];
+
+// 5️⃣ الأعراض للمساعد
+const SYMPTOMS = [
+  ["حمى", [1,2,3,4,14]],
+  ["عقيدات أو بثور على الجلد", [1]],
+  ["إفرازات من العين أو الأنف", [1,2,12,14]],
+  ["تقرحات في الفم", [2,3]],
+  ["بثور في القدمين أو لعاب غزير", [3]],
+  ["تورم الوجه أو اللسان", [4]],
+  ["عرج", [3,4,15]],
+  ["رائحة كريهة من الظلف", [15]],
+  ["إسهال", [2,9,11,16]],
+  ["سعال", [2,14]],
+  ["إجهاض", [4,5,6]],
+  ["احتباس المشيمة", [5]],
+  ["التهاب خصية الكبش", [5]],
+  ["نفوق مفاجئ", [7,17]],
+  ["نفوق مع نزف", [17]],
+  ["فقدان الشهية وعزلة نعجة حامل", [8,9]],
+  ["أعراض عصبية", [8]],
+  ["اضطراب بعد وجبة غنية بالمركّزات", [7,9]],
+  ["ضرع متورم أو حليب غير طبيعي", [10]],
+  ["هزال", [11]],
+  ["شحوب الأغشية أو تورم تحت الفك", [11]],
+  ["حكة وتساقط الصوف", [12]],
+  ["مولود ضعيف لا يرضع", [16]]
+];
+
+// 6️⃣ قواعد المراحل (للمحاكي)
+const STAGE_RULES = [
+  {priority:1, condition:"الحالة غير «حي»", stage:"خارج الحساب"},
+  {priority:2, condition:"حمل جارٍ وباقي ≤42 يوم", stage:"أواخر الحمل"},
+  {priority:3, condition:"حمل جارٍ وباقي >42 يوم", stage:"بداية الحمل"},
+  {priority:4, condition:"إجهاض بعد آخر تلقيح/ولادة", stage:"صيانة (جافة)"},
+  {priority:5, condition:"ولادة بلا فطام ≤56 يوم", stage:"رضاعة"},
+  {priority:6, condition:"ولادة بلا فطام >56 يوم", stage:"نهاية الرضاعة"},
+  {priority:7, condition:"جمع مخطط خلال 21 يوم", stage:"تحفيز قبل الجمع"},
+  {priority:8, condition:"غير ذلك", stage:"صيانة (جافة)"}
+];
+/* ==========================================================
+   8️⃣ الأسعار لكل كغ (بالدينار الجزائري) – يمكن تعديلها لاحقًا
+   ----------------------------------------------------------
+   نستخدم اسم العلف (العنصر الأول في المصفوفة) كمفتاح.
+   إذا لم نجد السعر، سيتم استخدام 0.5 DZD كقيمة افتراضية.
+   ========================================================== */
+const FEED_PRICES = {
+  // طاقة
+  "الشعير (حبوب)": 0.50,
+  "الذرة (حبوب)": 0.55,
+  "التمر غير المسوّق": 0.70,
+  "كسب الصوجا": 1.00,
+  "نخالة القمح": 0.60,
+  "تفل الشمندر": 0.55,
+  "التبن": 0.40,
+  "دريس الشوفان/الفيسة": 0.45,
+  "دريس الفصة": 0.48,
+  "الشعير الأخضر": 0.60,
+  "الحلفاء": 0.30,
+  "الشيح": 0.40,
+  "الرتم": 0.35,
+  "الحصيدة": 0.55,
+  // مكملات
+  "مركب معدني (CMV)": 2.00,
+  "الملح": 0.20,
+  "الكلس (كربونات كالسيوم)": 0.30,
+  // أضف باقي العلفوف هنا إذا لزم الأمر
+};
+// 7️⃣ المعاملات القابلة للتعديل
+const PARAMS = {
+  gestation: 150,        // مدة الحمل
+  lateGestation: 42,     // أواخر الحمل
+  flushing: 21,          // تحفيز قبل الجمع
+  lactationPeak: 56,     // رضاعة مكثفة
+  weaningAlert: 90,      // تنبيه فطام غير مسجل
+  birthAlerts: [14,7,3], // تنبيهات ولادة
+  overdueAlert: 3,       // تأخر ولادة قبل بيطري
+  transitionDays: 7,     // تدريج تغيير الحصة
+  ramPrep: 28,           // تحضير الكبش
+  lambFeedStart: 21,     // بداية علف المولود
+  maxConcentrate: 60,    // حد المركّزات %
+  minForage: 40,         // حد أدنى الأعلاف الخشنة %
+  minStockDays: 15,      // مخزون أدنى
+  minBCS: 2.5            // حالة جسم دنيا
+};
+
+// 8️⃣ التنبيهات
+const ALERTS = [
+  {name:"إجهاض", when:"فور التسجيل", priority:"عاجل", action:"عزل، قفازات، تحليل"},
+  {name:"نفوق مفاجئ", when:"فورًا", priority:"عاجل", action:"لا تفتح الجثة، أبلغ المصالح البيطرية"},
+  {name:"تأخر الولادة", when:"تجاوز الموعد", priority:"عاجل", action:"اتصل بالبيطري"},
+  {name:"فترة السحب", when:"أثناء العلاج", priority:"عاجل", action:"منع بيع/ذبح/حليب"},
+  {name:"ولادة قريبة", when:"14، 7، 3 أيام", priority:"مهم", action:"نقل إلى حظيرة الولادة"},
+  {name:"تغيير الحصة", when:"7 أيام قبل تغير المرحلة", priority:"مهم", action:"تدريج 7 أيام"},
+  {name:"تلقيح/تطهير", when:"15، 7 أيام، يوم الاستحقاق، متأخر", priority:"مهم", action:"تنفيذ"},
+  {name:"حالة الجسم", when:"<2.5 قبل جمع/ولادة", priority:"مهم", action:"تحسين التغذية"},
+  {name:"تحذير الحصة", when:"مركّزات>60% أو خشنة<40%", priority:"مهم", action:"تصحيح الحصة"},
+  {name:"المخزون", when:"<15 يوم استهلاك", priority:"مهم", action:"توريد"},
+  {name:"تأخر الوزن", when:"لا وزن منذ 30 يوم للحملان", priority:"مهم", action:"وزن"},
+  {name:"فطام", when:"بلوغ سن/وزن أو >90 يوم", priority:"عادي", action:"فطام"},
+  {name:"علف المولود", when:"عمر 21 يوم تحت الأم", priority:"عادي", action:"بدء علف"},
+  {name:"جودة البيانات", when:"لا حدث منذ 90 يوم", priority:"عادي", action:"مراجعة"},
+  {name:"تشخيص حمل", when:"بعد مدة يحددها البيطري", priority:"عادي", action:"تشخيص"},
+  {name:"دواء/صلاحية", when:"نقص أو <30 يوم", priority:"مهم", action:"توريد/استبدال"},
+  {name:"مهمة متأخرة", when:"تجاوز الموعد", priority:"عادي", action:"تنفيذ"},
+  {name:"حيوان معزول", when:"عزل دائم بلا نهاية", priority:"عادي", action:"مراجعة"}
+];
+
+// ============================================
+// دوال مساعدة للتصدير
+// ============================================
+window.FarmData = {
+  FEEDS, STAGES, RATIONS, DISEASES, SYMPTOMS, STAGE_RULES, PARAMS, ALERTS,
+  
+  // بحث علف بالاسم
+  findFeed(name) { return FEEDS.find(f => f[0].includes(name) || name.includes(f[0])); },
+  
+  // الحصول على حصة مرحلة
+  getRation(stageIndex) { return RATIONS[stageIndex] || []; },
+  
+  // حساب احتياجات مرحلة
+  getStageNeeds(stageIndex) { return STAGES[stageIndex] || null; },
+  
+  // تشخيص أعراض
+  diagnose(selectedSymptomIndices) {
+    return DISEASES.map(d => {
+      const matched = SYMPTOMS.filter((s,i) => selectedSymptomIndices.includes(i) && s[1].includes(d.id));
+      const totalSymptoms = SYMPTOMS.filter(s => s[1].includes(d.id)).length;
+      const matchedCount = matched.length;
+      return { disease: d, matched: matchedCount, total: totalSymptoms, score: totalSymptoms ? matchedCount/totalSymptoms : 0 };
+    }).filter(r => r.matched > 0).sort((a,b) => b.score - a.score || b.matched - a.matched);
+  }
+};
+
+console.log("✅ FarmData loaded:", { feeds:FEEDS.length, stages:STAGES.length, rations:RATIONS.length, diseases:DISEASES.length });
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>بطاقة حيوان</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="card">
+    <h1>الحيوان DZ-0002</h1>
+    <p>نعجة من سلالة أولاد جلال</p>
+    <p>المرحلة الحالية: أواخر الحمل</p>
+
+    <!-- تمرين الدرس 1: تاريخ الميلاد -->
+    <p>تاريخ الميلاد: <strong>20/02/2022</strong></p>
+
+    <!-- قسم الأحداث -->
+    <h2>الأحداث</h2>
+    <form id="event-form">
+      <label>التاريخ:
+        <input type="date" id="event-date" required>
+      </label>
+      <br><br>
+
+      <label>نوع الحدث:
+        <select id="event-type">
+          <option>ولادة</option>
+          <option>تلقيح</option>
+          <option>تشخيص حمل</option>
+          <option>علاج</option>
+        </select>
+      </label>
+      <br><br>
+
+      <label>ملاحظات:<br>
+        <textarea id="event-notes" rows="3" cols="30" placeholder="مثلاً: تلقى اللقاح بنجاح"></textarea>
+      </label>
+      <br><br>
+
+      <button type="submit">حفظ الحدث</button>
+    </form>
+
+    <h2>الأحداث المسجلة</h2>
+    <table id="events-table" border="1">
+      <thead>
+        <tr>
+          <th>التاريخ</th>
+          <th>نوع الحدث</th>
+          <th>ملاحظات</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+
+    <!-- ====== جدول الأوزان (كان ناقصاً) ====== -->
+    <h2>الأوزان</h2>
+    <table id="weights-table" border="1">
+      <thead>
+        <tr>
+          <th>التاريخ</th>
+          <th>الوزن (كغ)</th>
+          <th>النوع</th>
+          <th>ملاحظات</th>
+          <th>رقم الأذن</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+
+    <!-- نموذج تسجيل وزن جديد -->
+    <h2>تسجيل وزن جديد</h2>
+    <form id="weight-form">
+      <label>التاريخ:
+        <input type="date" id="date-input" required>
+      </label>
+      <br><br>
+
+      <label>الوزن (كغ):
+        <input type="number" step="0.1" id="weight-input" required>
+      </label>
+      <br><br>
+
+      <label>النوع:
+        <select id="type-input">
+          <option>ميلاد</option>
+          <option>فطام</option>
+          <option>عادي</option>
+        </select>
+      </label>
+      <br><br>
+
+      <label>ملاحظات:<br>
+        <textarea id="notes-input" rows="3" cols="30" placeholder="أي ملاحظات إضافية..."></textarea>
+      </label>
+      <br><br>
+
+      <label>رقم الأذن:
+        <input type="text" id="ear-input" placeholder="مثال: DZ-0002">
+      </label>
+      <br><br>
+
+      <button type="submit">حفظ</button>
+    </form>
+    <!-- =========  تحكم بالأسعار (DZD)  ========= -->
+<section id="prices-section" style="margin:30px 0; padding:20px; background:#f9f9f9; border:1px solid #ddd; border-radius:8px;">
+  <h2 style="color:#4a90d9; margin-top:0;">أسعار الأعلاف (الدينار postal)</h2>
+  <p style="color:#888; font-size:14px;">غير السعر لكل علف، ثم اضغط <b>حفظ الأسعار</b>.</p>
+
+  <div id="prices-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; margin-top:15px;">
+    <!-- الأعلاف ستُInject هنا من JavaScript -->
+  </div>
+
+  <button id="save-prices" class="sm" style="margin-top:15px;">حفظ الأسعار</button>
+  <button id="reset-prices" class="sm" style="margin-top:15px; background:#e74c3c;">إعادة التعيين</button>
+</section>
+  </div><!-- ====================  حاسبة الحصص  ==================== -->
+<section id="calc">
+  <h2>حاسبة الحصص اليومية</h2>
+  <p class="m">حدد المرحلة، عدد الحيوانات، ووزن كل حيوان لتظهر لك الكمية المطلوبة من العلف.</p>
+
+  <div class="card">
+    <label>المرحلة
+      <select id="calc-stage">
+        <option value="0">جافة / صيانة</option>
+        <option value="1">تحفيز قبل الجمع</option>
+        <option value="2">بداية الحمل</option>
+        <option value="3">أواخر الحمل (مولود)</option>
+        <option value="4">أواخر الحمل (توأم)</option>
+        <option value="5">رضاعة (مولود)</option>
+        <option value="6">رضاعة (توأم)</option>
+        <option value="7">نهاية الرضاعة</option>
+        <option value="8">كبش قبل وأثناء التلقيح</option>
+        <option value="9">حمل (زيادة 20 كغ)</option>
+        <option value="10">حمل (زيادة 30 كغ)</option>
+        <option value="11">حمل (زيادة 40 كغ)</option>
+      </select>
+    </label>
+
+    <label>عدد الحيوانات
+      <input type="number" id="calc-animals" min="1" value="1" class="m">
+    </label>
+
+    <label>وزن كل حيوان (كغ)
+      <input type="number" id="calc-weight" min="0" step="0.1" value="50" class="m">
+    </label>
+
+    <button id="calc-btn" class="sm">احسب</button>
+
+    <div class="res" id="calc-result" aria-live="polite"></div>
+  </div><!-- عنصر يحتوي على التحذيرات -->
+<!-- عنصر التحذيرات — بدون لون افتراضي -->
+<div id="warnings" style="margin-top:12px; font-weight:bold;"></div>
+</section>
+  <script src="data.js"></script>
+<script src="calc.js"></script>
+<script src="app.js" defer></script>
+</body>
+</html>
+/* === إعدادات عامة === */
+:root {
+  --color-primary: #2c662d;
+  --color-bg: #f4f8f4;
+  --color-card: #ffffff;
+  --color-border: #d0d8d0;
+  --font-main: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  --spacing: 1rem;
+  --radius: 8px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-main);
+  background-color: var(--color-bg);
+  color: #333;
+  line-height: 1.6;
+  padding: var(--spacing);
+  direction: rtl;
+}
+
+.card {
+  max-width: 700px;
+  margin: 0 auto;
+  background: var(--color-card);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  padding: calc(var(--spacing) * 2);
+}
+
+h1 {
+  color: var(--color-primary);
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 2px solid var(--color-primary);
+  padding-bottom: 0.5rem;
+}
+
+h2 {
+  color: var(--color-primary);
+  font-size: 1.3rem;
+  margin: 1.5rem 0 0.8rem;
+  border-right: 4px solid var(--color-primary);
+  padding-right: 0.5rem;
+}
+
+p { margin-bottom: 0.5rem; }
+strong { font-weight: 600; }
+
+.table-wrapper { overflow-x: auto; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+
+th, td {
+  border: 1px solid var(--color-border);
+  padding: 0.6rem 0.8rem;
+  text-align: center;
+}
+
+th {
+  background-color: var(--color-primary);
+  color: white;
+  font-weight: 600;
+}
+
+tr:nth-child(even) td { background-color: #fafafa; }
+tr:hover td { background-color: #eef5ee; }
+
+form { display: flex; flex-direction: column; gap: 1rem; margin-top: 0.5rem; }
+
+label { display: flex; flex-direction: column; gap: 0.3rem; font-weight: 500; }
+
+input[type="date"],
+input[type="number"],
+input[type="text"],
+select,
+textarea {
+  padding: 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 1rem;
+  background: white;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(44, 102, 45, 0.15);
+}
+
+textarea { min-height: 80px; resize: vertical; }
+
+button {
+  align-self: flex-start;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  padding: 0.7rem 1.5rem;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+button:hover { background: #1b7a1d; }
+button:active { transform: scale(0.98); }
+
+ul { margin: 0.5rem 0 1rem 1.5rem; }
+li { margin-bottom: 0.3rem; }
+  /* تحذير بسيط — أصفر */
+  .warn-yellow {
+    color: #f39c12;      /* برتقالي/أصفر */
+    background: #fff8e1;
+    border-left: 4px solid #f39c12;
+  }
+
+  /* خطر — أحمر */
+  .warn-red {
+    color: #ac1c0d;      /* أحمر */
+    background: #fdf2f2;
+    border-left: 4px solid #ac1c0d;
+  }
+
+  /* تنسيق عام لكل فقرة تحذير */
+  #warnings p {
+    margin: 6px 0;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+const weightForm  = document.getElementById('weight-form');
+const dateIn      = document.getElementById('date-input');
+const weightIn    = document.getElementById('weight-input');
+const typeIn      = document.getElementById('type-input');
+const notesIn     = document.getElementById('notes-input');
+const earIn       = document.getElementById('ear-input');
+const tableBody   = document.querySelector('#weights-table tbody');
+const STORAGE_KEY = 'animal_weights_DZ0002';
+
+function loadSavedData() {
+  const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+  data.forEach(row => addRowToTable(row.date, row.weight, row.type, row.notes, row.ear));
+}
+
+function addRowToTable(date, weight, type, notes, ear) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>${date}</td>
+    <td>${weight}</td>
+    <td>${type}</td>
+    <td>${notes || '-'}</td>
+    <td>${ear || '-'}</td>
+  `;
+  tableBody.appendChild(tr);
+}
+
+function saveToStorage(date, weight, type, notes, ear) {
+  const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+  data.push({ date, weight, type, notes, ear });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+weightForm.addEventListener('submit', e => {
+  e.preventDefault();
+
+  const date   = dateIn.value;
+  const weight = weightIn.value;
+  const type   = typeIn.value;
+  const notes  = notesIn.value.trim();
+  const ear    = earIn.value.trim();
+
+  if (!date || !weight) {
+    alert('الرجاء تعبئة التاريخ والوزن على الأقل.');
+    return;
+  }
+
+  addRowToTable(date, weight, type, notes, ear);
+  saveToStorage(date, weight, type, notes, ear);
+  weightForm.reset();
+  dateIn.focus();
+});
+
+loadSavedData();
+// === 7. أحداث (Events) - نسخة تشخيصية ===
+console.log('🔍 بدء تشخيص نموذج الأحداث...');
+
+// 1. التحقق من وجود العناصر
+const eventForm = document.getElementById('event-form');
+const eventDate = document.getElementById('event-date');
+const eventType = document.getElementById('event-type');
+const eventNotes = document.getElementById('event-notes');
+const eventsTableBody = document.querySelector('#events-table tbody');
+
+console.log('event-form:', eventForm);
+console.log('event-date:', eventDate);
+console.log('event-type:', eventType);
+console.log('event-notes:', eventNotes);
+console.log('events-table tbody:', eventsTableBody);
+
+// 2. إذا أي عنصر مفقود → أظهر خطأ واضح في Console
+if (!eventForm) console.error('❌ مفقود: <form id="event-form">');
+if (!eventDate) console.error('❌ مفقود: <input id="event-date">');
+if (!eventType) console.error('❌ مفقود: <select id="event-type">');
+if (!eventNotes) console.error('❌ مفقود: <textarea id="event-notes">');
+if (!eventsTableBody) console.error('❌ مفقود: <table id="events-table"> مع <tbody>');
+
+const EVENTS_STORAGE_KEY = 'animal_events_DZ0002';
+
+function loadEventsData() {
+  const data = JSON.parse(localStorage.getItem(EVENTS_STORAGE_KEY)) || [];
+  if (eventsTableBody) {
+    eventsTableBody.innerHTML = '';
+    data.forEach(row => addEventRowToTable(row.date, row.type, row.notes));
+  }
+}
+
+function addEventRowToTable(date, type, notes) {
+  if (!eventsTableBody) return;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${date}</td><td>${type}</td><td>${notes || '-'}</td>`;
+  eventsTableBody.appendChild(tr);
+}
+
+function saveEventToStorage(date, type, notes) {
+  const data = JSON.parse(localStorage.getItem(EVENTS_STORAGE_KEY)) || [];
+  data.push({ date, type, notes });
+  localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(data));
+}
+
+if (eventForm) {
+  eventForm.addEventListener('submit', e => {
+    e.preventDefault();
+    console.log('✅ تم الضغط على حفظ الحدث');
+    
+    const date = eventDate?.value;
+    const type = eventType?.value;
+    const notes = eventNotes?.value.trim();
+
+    if (!date || !type) {
+      alert('الرجاء تعبئة التاريخ ونوع الحدث.');
+      return;
+    }
+
+    addEventRowToTable(date, type, notes);
+    saveEventToStorage(date, type, notes);
+    eventForm.reset();
+    eventDate?.focus();
+  });
+} else {
+  console.error('🚫 لا يمكن إضافة مستمع الحدث: النموذج غير موجود!');
+}
+
